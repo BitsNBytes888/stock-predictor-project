@@ -11,7 +11,7 @@ def build_dataset(
     seq_len: int = 20,
 ):
     df = fetch_ohlcv(ticker)
-    validate_ohlcv(df)
+    df = validate_ohlcv(df)
     df = clean_ohlcv(df)
 
     feature_df = engineer_basic_features(df)

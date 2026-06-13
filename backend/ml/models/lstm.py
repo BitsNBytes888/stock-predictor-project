@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from backend.ml.preprocessing.scaling import StandardScaler3D
+
 
 class LSTMModel:
     def __init__(
@@ -41,8 +43,6 @@ class LSTMModel:
 
         self.fc = nn.Linear(self.hidden_dim, 1)
 
-        self.model = nn.Sequential(self.lstm, self.fc)
-
         self.criterion = nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
 
@@ -63,7 +63,10 @@ class LSTMModel:
         y: (samples,)
         """
 
-        X_tensor = torch.tensor(X, dtype=torch.float32).to(self.device)
+        self.scaler = StandardScaler3D().fit(X)
+        X_scaled = self.scaler.transform(X)
+
+        X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self.device)
         y_tensor = torch.tensor(y, dtype=torch.float32).to(self.device)
 
         y_tensor = y_tensor.view(-1, 1)
@@ -88,8 +91,10 @@ class LSTMModel:
 
         self.lstm.eval()
 
+        X_scaled = self.scaler.transform(X)
+
         with torch.no_grad():
-            X_tensor = torch.tensor(X, dtype=torch.float32).to(self.device)
+            X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(self.device)
             lstm_out, _ = self.lstm(X_tensor)
             last_hidden = lstm_out[:, -1, :]
             preds = self.fc(last_hidden)
