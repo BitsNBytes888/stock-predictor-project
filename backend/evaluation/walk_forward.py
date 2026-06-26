@@ -9,6 +9,7 @@ def walk_forward_eval(
     y: np.ndarray,
     model_factory: Callable[[], Any],
     min_train_size: int = 100,
+    retrain_every: int = 1,
 ) -> Dict[str, float]:
     """
     Generic walk-forward evaluation.
@@ -23,6 +24,11 @@ def walk_forward_eval(
         A function that returns a *new, untrained* model instance.
     min_train_size : int
         Minimum samples before starting walk-forward.
+    retrain_every : int
+        Refit a fresh model every this many test steps. Default 1 preserves
+        the original per-step refit behavior. Larger values (e.g. 10) make
+        expensive models (LSTM, tree ensembles) practical by spreading compute
+        over fewer fits while allowing a bigger epoch/iteration budget per fit.
 
     Returns
     -------
@@ -33,23 +39,25 @@ def walk_forward_eval(
     preds = []
     truths = []
 
-    for t in range(min_train_size, len(X)):
-        # Train set: [0 ... t-1]
-        X_train = X[:t]
-        y_train = y[:t]
+    model = None
+    steps_since_fit = 0
 
-        # Test point: time t
+    for t in range(min_train_size, len(X)):
+        if model is None or steps_since_fit >= retrain_every:
+            X_train = X[:t]
+            y_train = y[:t]
+            model = model_factory()
+            model.fit(X_train, y_train)
+            steps_since_fit = 0
+
         X_test = X[t:t + 1]
         y_test = y[t]
-
-        # Fresh model every step (CRITICAL)
-        model = model_factory()
-        model.fit(X_train, y_train)
 
         pred = model.predict(X_test)[0]
 
         preds.append(pred)
         truths.append(y_test)
+        steps_since_fit += 1
 
     preds = np.array(preds)
     truths = np.array(truths)
