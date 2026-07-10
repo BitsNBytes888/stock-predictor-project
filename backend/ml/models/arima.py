@@ -2,6 +2,7 @@
 
 import warnings
 
+import joblib
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 
@@ -27,3 +28,10 @@ class ARIMABaseline:
     def predict(self, X: np.ndarray) -> np.ndarray:
         steps = X.shape[0]
         return np.asarray(self.fitted.forecast(steps=steps))
+
+    def save(self, path: str) -> None:
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str) -> "ARIMABaseline":
+        return joblib.load(path)

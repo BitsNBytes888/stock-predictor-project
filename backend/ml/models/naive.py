@@ -1,5 +1,6 @@
 # backend/ml/models/naive.py
 
+import joblib
 import numpy as np
 
 
@@ -17,3 +18,10 @@ class NaiveBaseline:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         return np.zeros(X.shape[0])
+
+    def save(self, path: str) -> None:
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str) -> "NaiveBaseline":
+        return joblib.load(path)

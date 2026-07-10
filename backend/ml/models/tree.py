@@ -1,5 +1,6 @@
 # backend/ml/models/tree.py
 
+import joblib
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingRegressor
 
@@ -23,3 +24,10 @@ class TreeBaseline:
     def predict(self, X: np.ndarray) -> np.ndarray:
         X_flat = X.reshape(X.shape[0], -1)
         return self.model.predict(X_flat)
+
+    def save(self, path: str) -> None:
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str) -> "TreeBaseline":
+        return joblib.load(path)

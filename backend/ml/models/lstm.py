@@ -100,3 +100,27 @@ class LSTMModel:
             preds = self.fc(last_hidden)
 
         return preds.cpu().numpy().flatten()
+
+    # --- Persistence ---
+    def save(self, path: str) -> None:
+        torch.save({
+            "config": {
+                "input_dim": self.input_dim,
+                "hidden_dim": self.hidden_dim,
+                "num_layers": self.num_layers,
+                "lr": self.lr,
+                "epochs": self.epochs,
+            },
+            "lstm_state": self.lstm.state_dict(),
+            "fc_state": self.fc.state_dict(),
+            "scaler": self.scaler,
+        }, path)
+
+    @classmethod
+    def load(cls, path: str) -> "LSTMModel":
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        model = cls(**ckpt["config"])
+        model.lstm.load_state_dict(ckpt["lstm_state"])
+        model.fc.load_state_dict(ckpt["fc_state"])
+        model.scaler = ckpt["scaler"]
+        return model

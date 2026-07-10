@@ -1,5 +1,6 @@
 # backend/ml/models/baseline.py
 
+import joblib
 import numpy as np
 from typing import Tuple
 
@@ -44,3 +45,10 @@ class LinearBaseline:
 
         X_flat = X.reshape(X.shape[0], -1)
         return X_flat @ self.weights + self.bias
+
+    def save(self, path: str) -> None:
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: str) -> "LinearBaseline":
+        return joblib.load(path)
