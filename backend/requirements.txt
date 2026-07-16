@@ -5,3 +5,8 @@ scikit-learn
 torch
 statsmodels
 joblib
+fastapi
+uvicorn[standard]
+pyarrow
+pytest
+httpx

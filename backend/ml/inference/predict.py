@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-from backend.ml.data.fetch_yfinance import fetch_ohlcv
+from backend.ml.data.cache import fetch_ohlcv_cached
 from backend.ml.data.validate import validate_ohlcv
 from backend.ml.data.clean import clean_ohlcv
 from backend.ml.features.basic import engineer_basic_features
@@ -42,7 +42,7 @@ def predict_next(
 
     model = MODEL_CLASSES[model_type].load(path)
 
-    df = fetch_ohlcv(ticker)
+    df = fetch_ohlcv_cached(ticker)
     df = validate_ohlcv(df)
     df = clean_ohlcv(df)
     feature_df = add_technical_features(engineer_basic_features(df))
