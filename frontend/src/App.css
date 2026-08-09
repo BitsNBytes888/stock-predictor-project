@@ -1,0 +1,357 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f3f4f6;
+  color: #1a1a1a;
+  line-height: 1.5;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+
+.app {
+  min-height: 100vh;
+}
+
+.app-header {
+  background: #0f172a;
+  color: white;
+  padding: 24px 32px;
+  border-bottom: 2px solid #1e3a5f;
+}
+
+.header-content h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.header-content p {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+.app-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+/* ── Controls ────────────────────────────────────────────── */
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: white;
+  padding: 20px 24px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  margin-bottom: 24px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-group label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6b7280;
+}
+
+.control-group select {
+  padding: 8px 32px 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  min-width: 150px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.control-group select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.control-group select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.predict-btn {
+  padding: 9px 28px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.predict-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.predict-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.predict-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Error / empty state ─────────────────────────────────── */
+
+.ticker-search-wrapper {
+  position: relative;
+}
+
+.ticker-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  list-style: none;
+  z-index: 200;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ticker-option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.ticker-option:last-child {
+  border-bottom: none;
+}
+
+.ticker-option.highlighted {
+  background: #eff6ff;
+}
+
+.ticker-symbol {
+  font-weight: 700;
+  min-width: 52px;
+  color: #111827;
+  font-size: 0.875rem;
+}
+
+.ticker-name {
+  color: #6b7280;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticker-input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  min-width: 180px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.ticker-input::placeholder {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #9ca3af;
+}
+
+.ticker-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.ticker-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-box {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+
+.pred-loading {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.9rem;
+}
+
+.pred-loading.training {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fefce8;
+  color: #854d0e;
+  border-color: #fde68a;
+}
+
+.pred-loading.training strong {
+  font-size: 0.9rem;
+}
+
+.pred-loading.training span {
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  color: #9ca3af;
+  font-size: 0.95rem;
+}
+
+/* ── Results ─────────────────────────────────────────────── */
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Chart ───────────────────────────────────────────────── */
+
+.chart-container {
+  background: white;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.chart-container h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 20px;
+}
+
+.chart-tooltip {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.tooltip-date {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.tooltip-price {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* ── Prediction Card ─────────────────────────────────────── */
+
+.prediction-card {
+  background: white;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.prediction-card h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 20px;
+}
+
+.prediction-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.prediction-row:last-child {
+  border-bottom: none;
+}
+
+.label {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.value.mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.9rem;
+}
+
+.value.change.up {
+  color: #16a34a;
+}
+
+.value.change.down {
+  color: #dc2626;
+}
+
+.disclaimer {
+  margin-top: 16px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
+}

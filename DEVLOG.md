@@ -1,6 +1,6 @@
 # Stock Predictor — Dev Log
 
-A running journal of every decision made while building this project: what existed, what was broken, what each phase added, and — most importantly — **why**.
+A running journal of every decision made while building this project: what existed, what was broken, what each phase added, and, most importantly, **why**.
 
 ---
 
@@ -27,7 +27,7 @@ Three reasons this project exists:
 | Data cache | `parquet` via `pyarrow` | Preserves dtypes and DatetimeIndex; columnar format is efficient for time-series slices |
 | API | `FastAPI` + `uvicorn` | Auto-generated OpenAPI docs, Pydantic validation, async-ready, pairs well with React |
 | Tests | `pytest` | Industry standard; fixtures, mocking, and parametrize keep tests readable |
-| Frontend (planned) | React (Vite) + lightweight-charts | Fast dev server, rich chart library designed for financial data |
+| Frontend | React (Vite) + Recharts | Fast dev server; Recharts is React-native (composable JSX, no imperative API), easier to learn than TradingView's canvas-based lightweight-charts |
 
 ---
 
@@ -80,6 +80,22 @@ stock-predictor-project/
 │   ├── test_metrics.py
 │   ├── test_walk_forward.py
 │   └── test_api.py
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── index.html
+│   └── src/
+│       ├── main.jsx                 React entry point
+│       ├── App.jsx                  top-level state + layout
+│       ├── App.css                  all styles
+│       ├── api.js                   fetch wrappers for 5 backend endpoints
+│       ├── data/
+│       │   └── tickers.json         639 ticker symbols + names for autocomplete
+│       └── components/
+│           ├── TickerInput.jsx      search input + typeahead dropdown
+│           ├── Controls.jsx         TickerInput + model dropdown + submit button
+│           ├── PriceChart.jsx       Recharts LineChart (history + predicted dot)
+│           └── PredictionCard.jsx   last close / predicted price / % change / log return
 ├── artifacts/                       trained model files (gitignored)
 │   └── AAPL/
 │       ├── naive.pkl
@@ -330,6 +346,7 @@ Four endpoints:
 | `/api/models` | GET | `{"models": ["naive", "linear", "arima", "tree", "lstm"]}` | — |
 | `/api/history/{ticker}` | GET | `{"ticker": "AAPL", "history": [{date, open, high, low, close, volume}, ...]}` | 404 if fetch/validate fails |
 | `/api/predict/{ticker}?model=lstm` | GET | `{ticker, model, last_close, predicted_log_return, predicted_price}` | 404 if model file missing, 422 if bad data |
+| `/api/artifact/{ticker}/{model}` | GET | `{"exists": true\|false}` — file existence check only | — |
 
 **Why FastAPI?**
 - Auto-generated interactive API docs at `/docs` (OpenAPI / Swagger UI)
@@ -391,40 +408,192 @@ tests/
 
 ---
 
+## Phase 5 — React Frontend
+
+**Goal:** a real browser UI that talks to the FastAPI backend — price history chart, model selector, and a prediction card showing the next-day price forecast.
+
+### Stack decisions
+
+**Vite** as the dev server and bundler. It starts in milliseconds and does HMR (hot module replacement) so the browser updates instantly as you edit JSX. The alternative (Create React App) is officially deprecated.
+
+**Recharts** for charting. It's React-native: charts are composed from JSX components like `<LineChart>`, `<Line>`, `<XAxis>` — the same model as the rest of the UI, no imperative canvas API to learn. TradingView's `lightweight-charts` is more capable for financial data but requires a separate imperative API and doesn't integrate naturally with React state.
+
+**Native `fetch`** instead of axios. The API calls are simple enough that fetch is clearer; no dependency needed.
+
+**Plain CSS** (one `App.css`) instead of Tailwind or styled-components. Explicit for now; easier to understand and modify as a frontend beginner than utility-class-based systems.
+
+### Component structure
+
+All state lives in `App.jsx` (the "single source of truth" pattern for small apps — no Redux or Zustand needed yet):
+
+```
+App.jsx               state owner
+├── Controls.jsx      ticker input + model dropdown + button
+├── PriceChart.jsx    Recharts LineChart
+└── PredictionCard.jsx  last close / predicted price / % change / log return
+```
+
+### The predicted point on the chart
+
+The prediction is for "next trading day" — a date that doesn't exist in the history array yet. Rather than inventing a date, the predicted point is appended to the chart data as `{ date: 'Predicted', close: null, predicted: price }` and rendered as a second `<Line>` series with `strokeWidth={0}` (so no line connects it to the history) and a large orange dot (`r: 7`). This makes it visually distinct without cluttering the X-axis with a fabricated future date.
+
+### Two-phase loading
+
+History fetch and prediction are sequential, not parallel (`Promise.all` was the first implementation but replaced):
+
+1. `getHistory(ticker)` → fast (~2s, yfinance + cache) → chart renders
+2. `checkArtifact(ticker, model)` → instant → determines which status message to show
+3. `getPredict(ticker, model)` → may be slow → prediction card renders when done
+
+This gives the user visual feedback (the chart) while the potentially-slow prediction step runs.
+
+### Log return → price conversion
+
+`predicted_price = last_close * exp(predicted_log_return)`
+
+This is exact, not an approximation. Since `log_return = log(P_t / P_{t-1})`, solving for `P_t` gives `P_t = P_{t-1} * exp(log_return)`. The percentage change shown in `PredictionCard` is `(predicted_price / last_close - 1) * 100`.
+
+---
+
+## Phase 5.1 — Any-Ticker Search + On-Demand Training
+
+**Goal:** remove the restriction that predictions only work for pre-trained tickers. Any valid ticker symbol should work.
+
+### The problem
+
+The original `/api/predict` endpoint raised a `FileNotFoundError` if no artifact existed for the requested ticker+model combination, which the frontend surfaced as an error message. The user had to manually run `train_model` on the command line before the UI would work for any new ticker. This breaks the UX for exploratory use.
+
+### Solution: on-demand training in the API layer
+
+In `backend/app/main.py`, `get_prediction` now catches `FileNotFoundError` from `predict_next` and calls `train_model(ticker, model)` before retrying. First request for a new ticker trains the model; all subsequent requests load the saved artifact and return instantly.
+
+```python
+except FileNotFoundError:
+    train_model(ticker, model, artifacts_dir=ARTIFACTS_DIR)
+    result = predict_next(ticker, model, artifacts_dir=ARTIFACTS_DIR)
+```
+
+The training is synchronous — the HTTP request stays open until training completes. For fast models (naive, linear, arima, tree) this is <5 seconds. For LSTM (~30–60s), the user sees the loading state in the UI. FastAPI/uvicorn handles this cleanly since sync endpoint functions run in a thread pool, not blocking the event loop.
+
+**Why on-demand and not pre-training a fixed set of tickers?**
+- A fixed list goes stale and is always someone's favourite ticker short
+- The cache-on-first-request pattern is standard for expensive computations that can be stored (CDN caching, memoization, etc.)
+- The user benefits immediately: first request is slow, all subsequent ones are fast
+
+### Ticker input change
+
+The ticker `<select>` dropdown was replaced with a `<input type="text">` search bar. Symbols auto-uppercase as you type. The button is disabled until something is typed. Enter key submits.
+
+---
+
+## Phase 5.2 — Ticker Autocomplete + Training Status UX
+
+**Goal:** two quality-of-life improvements discovered during first real use.
+
+### 1. Ticker autocomplete
+
+**Problem:** a plain text input gives no guidance. Typos like `MCFST` instead of `MSFT` waste a full round-trip (history fetch, yfinance call) before failing.
+
+**Solution:** a `TickerInput.jsx` component that wraps the input with a typeahead dropdown. A static `tickers.json` (639 entries: full S&P 500 + NASDAQ 100 + major ETFs + popular individual names) is bundled with the frontend. Filtering happens entirely client-side — no extra API call, instant response.
+
+Implementation notes:
+- `useEffect` on the input value recomputes filtered suggestions (`symbol.startsWith(value)`, max 8 shown)
+- Click-outside detection uses a `mousedown` listener on `document` pointing to a `containerRef` — this is the standard pattern because `blur` fires before `click`, so if you used `onClick` on list items, the dropdown would close before the click registered
+- Keyboard nav: `↑`/`↓` move the highlighted index, `Enter` selects the highlighted item or submits if none is highlighted, `Escape` closes
+- List items use `onMouseDown` (not `onClick`) for the same reason — prevents the input blur from closing the dropdown before selection fires
+
+**Validation approach:** soft. The suggestions guide the user toward valid symbols, but we don't block submission for unlisted ones — some valid tickers won't be in the bundled list (e.g., recent IPOs). yfinance is the hard validator; an invalid ticker fails at `/api/history` with a clear 404 error message surfaced in the red error box.
+
+### 2. Training status clarity
+
+**Problem:** the blue "Training…" box appeared during *every* prediction request, even when the artifact already existed and inference would complete in <1 second. This was misleading (implied it was always training) and provided no time estimate for the first-time case.
+
+**Solution:** a `GET /api/artifact/{ticker}/{model}` endpoint that returns `{"exists": bool}` (just a file-existence check, no ML work). The frontend calls this after the history loads, then chooses one of two status messages:
+
+- **Artifact exists** → blue box: "Running inference for TSLA…" (disappears in <1s)
+- **Artifact missing** → amber/yellow box: "Training lstm model for TSLA for the first time. The trained model is saved — future predictions will be instant. LSTM may take 30–60s."
+
+The two variants are visually distinct (blue vs. amber) so users can instantly tell whether they're waiting for a one-time training cost or a cached inference.
+
+---
+
 ## Running the Project
 
+### Prerequisites
+
+Install Python dependencies (from `stock-predictor-project/`):
 ```bash
-# All commands from stock-predictor-project/
+pip install -r backend/requirements.txt
+```
 
-# Run tests
+Install frontend dependencies (from `stock-predictor-project/frontend/`):
+```bash
+npm install
+```
+
+### Running the full stack
+
+Open two terminal windows:
+
+**Terminal 1 — Backend API** (from `stock-predictor-project/`):
+```bash
+python3.12 -m uvicorn backend.app.main:app --reload --port 8000
+```
+
+**Terminal 2 — Frontend dev server** (from `stock-predictor-project/frontend/`):
+```bash
+npm run dev
+```
+
+Then open **http://localhost:5173** in your browser.
+
+- The API interactive docs are at **http://localhost:8000/docs**
+- First prediction for any new ticker trains the model on-demand. Fast models (naive, linear, arima, tree) take <5s. LSTM takes 30–60s but the UI shows a status message while it runs.
+
+### Running tests
+
+From `stock-predictor-project/`:
+```bash
 python3.12 -m pytest tests/ -v
+```
 
-# Train all models for AAPL
+72 tests, ~9 seconds, no real network calls.
+
+### Training models manually
+
+From `stock-predictor-project/` (the UI does this automatically on first request, but you can pre-train too):
+```bash
 python3.12 -m backend.ml.training.train_model AAPL naive
 python3.12 -m backend.ml.training.train_model AAPL linear
 python3.12 -m backend.ml.training.train_model AAPL arima
 python3.12 -m backend.ml.training.train_model AAPL tree
 python3.12 -m backend.ml.training.train_model AAPL lstm
+```
 
-# Run inference (requires trained model)
+### Running inference from the command line
+
+```bash
 python3.12 -m backend.ml.inference.predict AAPL lstm
+```
 
-# Start the API
-python3.12 -m uvicorn backend.app.main:app --reload --port 8000
-# API docs: http://localhost:8000/docs
+### Walk-forward model comparison (ML experiments)
 
-# Walk-forward model comparison (slow — re-trains all models)
+```bash
 python3.12 -m backend.experiments.compare_models
 ```
 
-Python version: **3.12** (system install at `/Library/Frameworks/Python.framework/Versions/3.12/`). The default `python` in this environment points to a conda base that lacks the project's dependencies — always use `python3.12` explicitly.
+This re-runs walk-forward evaluation across all models for AAPL. It's slow (LSTM trains many times) and is purely for understanding model performance — the API and UI don't use it.
+
+---
+
+**Python version note:** always use `python3.12` explicitly. The default `python` in this environment points to a conda base that lacks the project's dependencies.
 
 ---
 
 ## What's Next
 
-- **Phase 5 — React Frontend:** Vite + React, calling `/api/history` for the price chart and `/api/predict` for the prediction overlay. Charting library: `lightweight-charts` (TradingView's open-source lib, designed for financial data). Ticker input and model selector driven by `/api/tickers` and `/api/models`.
+- **Phase 6 — Advanced Models (stretch):** GRU (near-free — swap `nn.LSTM` for `nn.GRU` in `lstm.py`), and optionally a small Transformer encoder or Temporal Convolutional Network (TCN). Unlikely to outperform simpler models on this problem, but demonstrates architectural range and is worth understanding.
 
-- **Phase 6 — Advanced Models (stretch):** GRU (near-free addition — swap `nn.LSTM` for `nn.GRU` in `lstm.py`), and optionally a small Transformer encoder or Temporal Convolutional Network (TCN). Likely won't outperform the simpler models on this problem, but demonstrates architectural range.
+- **Phase 7 — Styling pass:** the current CSS is functional but minimal. A proper styling pass with better typography, color theme, responsive layout, and chart polish is deferred to later.
 
-- **Phase 7 — Alternative Data (optional):** News sentiment scoring via a free API (e.g., Alpha Vantage news, or a local NLP model) aligned to trading dates. This is a significant scope increase and is deferred until the core product is working end-to-end.
+- **Phase 8 — Alternative Data (optional):** news sentiment scoring via a free API (e.g., Alpha Vantage news endpoint, or a local NLP model) aligned to trading dates. Significant scope increase — deferred until the core product is stable.
